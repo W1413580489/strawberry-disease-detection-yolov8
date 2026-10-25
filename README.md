@@ -45,6 +45,26 @@
 
 ---
 
+## ⭐ 模型版本对比（重要）
+
+本项目包含 1 个基线模型和 3 种改进结构，**最终版本为「LSKA（SPPF前）+ P2」**：
+
+| 版本 | 结构配置文件 | 改动说明 | 检测头 | 对应已训练权重 |
+|------|-------------|---------|--------|---------------|
+| 基线 YOLOv8s | 官方 `yolov8s.pt`（无需yaml） | 原始结构，无改进 | P3/P4/P5 三头 | `output/exp9/weights/best.pt` |
+| 早期版：LSKA（SPPF后） | `ultralytics/models/v8/YOLOv8_LSKA.yaml` | 仅在 backbone 末尾 **SPPF 之后** 加 1 个 LSKA | 三头 | （早期实验，未附权重） |
+| **最终版：LSKA（SPPF前）+ P2** ⭐ | `ultralytics/models/v8/YOLOv8_LSKA_P2.yaml` | 在 **P3、P4、SPPF 之前** 共加 3 个 LSKA（核大小7），并新增 P2 小目标检测层 | P2/P3/P4/P5 四头 | `output/LSKA_P2_Scratch2`、`LSKA_P2_Scratch3` |
+| 对比版：LSKA + P2 + GhostConv | `ultralytics/models/v8/YOLOv8_LSKA_P2_GhostConv.yaml` | 与最终版结构相同，仅把 backbone 的 C2f 替换为轻量的 C2f_GhostConv | 四头 | `output/LSKA_P2_GhostConv_Scratch2`、`_Scratch3` |
+
+**版本演进逻辑**（方便理解对比实验）：
+- `LSKA（SPPF后）` → 早期尝试，注意力加在 SPPF 之后，效果有限；
+- `LSKA（SPPF前）+ P2` → **最终采用版本**：把 LSKA 前移到 SPPF 之前（让注意力先聚合全局信息再进 SPPF 多尺度池化），在 P3/P4 中间层也插入 LSKA 抑制背景干扰，同时新增 P2 高分辨率检测头解决草莓小目标漏检；
+- `+ GhostConv` → 在最终版基础上用 GhostConv 轻量卷积替换 backbone 的 C2f，对比参数量/速度与精度的权衡。
+
+> ⚠️ 注意：`ultralytics/models/v8/yolov8s.yaml` 是官方基线结构文件，但其中也被加入过 LSKA 实验，**请勿用它当基线训练**。复现基线请直接加载预训练权重 `yolov8s.pt`（见 4.1）。
+
+---
+
 ## 一、下载本项目
 
 **方式1：git 克隆（推荐）**
@@ -147,23 +167,39 @@ names: [Angular_Leafspot, Anthracnose_Fruit_Rot, Blossom_Blight, Gray_Mold, Leaf
 
 ### 4.1 训练模型
 
-先编辑 `train.py` 开头的路径配置，改成自己的路径：
+先编辑 `train.py` 的 `train()` 函数开头，把路径改成你自己的解压路径：
 
 ```python
-model_path = "D:/你的路径/yolov8s.pt"                 # 预训练权重
-data_path = "D:/你的路径/data/aug_data/dataset.yaml"  # 数据集配置
-project_dir = "D:/你的路径/output"                    # 训练结果保存目录
+model_cfg = "D:/你的路径/ultralytics/models/v8/YOLOv8_LSKA_P2.yaml"  # ① 模型结构文件
+pretrained_weight = "D:/你的路径/yolov8s.pt"                          # ② 预训练权重
+
+train_args = {
+    "data": "D:/你的路径/data/aug_data/dataset.yaml",   # ③ 数据集配置
+    "project": "D:/你的路径/output",                    # ④ 结果保存根目录
+    "name": "LSKA_P2_Scratch",                         # ⑤ 实验名（输出子目录名）
+    "imgsz": 640, "epochs": 150, "batch": 4,
+    "pretrained": True, "optimizer": 'SGD',
+}
 ```
 
-然后运行（默认 imgsz=640, epochs=100, batch=4）：
+**训练不同版本的切换**（修改 `model_cfg` 一行即可）：
+
+| 想训练的版本 | `model_cfg` 改为 | `name` 建议改为 |
+|-------------|------------------|----------------|
+| ⭐ 最终版：LSKA（SPPF前）+ P2 | `YOLOv8_LSKA_P2.yaml` | `LSKA_P2_Scratch` |
+| 对比版：+ GhostConv 轻量化 | `YOLOv8_LSKA_P2_GhostConv.yaml`（当前默认） | `LSKA_P2_GhostConv_Scratch` |
+| 基线 YOLOv8s | 不用 yaml：把 `model = YOLO(model_cfg)` 改为 `model = YOLO(pretrained_weight)` | `baseline` |
+
+运行：
 
 ```bash
 python train.py
 ```
 
-- 训练结果保存在 `output/expN/`（N 自动递增），最佳权重为 `output/expN/weights/best.pt`
-- 训练完成后会自动将 best.pt 导出为 ONNX 格式
-- 显存不足时：把 `batch_size` 改小（如 2）
+- 训练结果保存在 `output/<name>/`，最佳权重为 `output/<name>/weights/best.pt`
+- 训练完成后脚本会自动把最新实验的 best.pt 导出为 ONNX 格式
+- `train.py` 中 `model = model.load(pretrained_weight)` 默认被注释（从头训练 Scratch 模式）；如想迁移学习可取消注释，新增的 LSKA/P2 层会随机初始化、其余层加载预训练权重
+- 显存不足时：把 `batch` 改小（如 2）
 
 ### 4.2 图片/视频批量检测
 
@@ -214,12 +250,12 @@ python pt-onnx.py
 | 权重路径 | 对应模型 |
 |---------|---------|
 | `output/exp9/weights/best.pt` | 基线 YOLOv8s |
-| `output/LSKA_P2_Scratch2/weights/best.pt` | 改进版：LSKA + P2 |
-| `output/LSKA_P2_Scratch3/weights/best.pt` | 改进版：LSKA + P2 |
-| `output/LSKA_P2_GhostConv_Scratch2/weights/best.pt` | 改进版：LSKA + P2 + GhostConv |
-| `output/LSKA_P2_GhostConv_Scratch3/weights/best.pt` | 改进版：LSKA + P2 + GhostConv |
+| `output/LSKA_P2_Scratch2/weights/best.pt` | ⭐ **最终版本：LSKA（SPPF前）+ P2** |
+| `output/LSKA_P2_Scratch3/weights/best.pt` | ⭐ **最终版本：LSKA（SPPF前）+ P2** |
+| `output/LSKA_P2_GhostConv_Scratch2/weights/best.pt` | 对比版：LSKA + P2 + GhostConv 轻量化 |
+| `output/LSKA_P2_GhostConv_Scratch3/weights/best.pt` | 对比版：LSKA + P2 + GhostConv 轻量化 |
 
-> LSKA 注意力机制代码位于 `ultralytics/nn/modules.py`；如需从头训练改进模型，`train.py` 默认已配置为 `YOLOv8_LSKA_P2_GhostConv.yaml` 结构。
+> LSKA 注意力机制代码位于 `ultralytics/nn/modules.py`；各版本结构定义与训练切换方法见上文「模型版本对比」和 4.1 节。
 
 ---
 
