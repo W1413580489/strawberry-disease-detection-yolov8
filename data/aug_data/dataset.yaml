@@ -1,0 +1,11 @@
+train: D:/env/yolov8_cpu/YOLOv8-main/data/aug_data/train/images
+val: D:/env/yolov8_cpu/YOLOv8-main/data/aug_data/valid/images
+nc: 7
+names: 
+- Angular_Leafspot
+- Anthracnose_Fruit_Rot
+- Blossom_Blight
+- Gray_Mold
+- Leaf_Spot
+- Powdery_Mildew_Fruit
+- Powdery_Mildew_Leaf

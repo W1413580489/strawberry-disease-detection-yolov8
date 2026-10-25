@@ -1,0 +1,50 @@
+# YOLOv8_LSKA_P2.yaml
+# 目标：解决小目标漏检与背景干扰
+nc: 7
+depth_multiple: 0.33
+width_multiple: 0.50
+
+backbone:
+  - [-1, 1, Conv, [64, 3, 2]]   # 0-P1/2
+  - [-1, 1, Conv, [128, 3, 2]]  # 1-P2/4
+  - [-1, 3, C2f_GhostConv, [128, True]]   # 2 (P2特征)
+  - [-1, 1, Conv, [256, 3, 2]]  # 3-P3/8
+  - [-1, 6, C2f_GhostConv, [256, True]]   # 4
+  - [-1, 1, LSKA, [7]]          # 5 (P3层加入LSKA，强化细节)
+  - [-1, 1, Conv, [512, 3, 2]]  # 6-P4/16
+  - [-1, 6, C2f_GhostConv, [512, True]]   # 7
+  - [-1, 1, LSKA, [7]]          # 8 (P4层加入LSKA，抑制背景)
+  - [-1, 1, Conv, [1024, 3, 2]] # 9-P5/32
+  - [-1, 3, C2f_GhostConv, [1024, True]]  # 10
+  - [-1, 1, LSKA, [7]]          # 11 (SPPF前置LSKA，全局聚焦)
+  - [-1, 1, SPPF, [1024, 5]]    # 12
+
+head:
+  - [-1, 1, nn.Upsample, [None, 2, 'nearest']]
+  - [[-1, 8], 1, Concat, [1]]  # 14 cat P4 (指向LSKA后的特征)
+  - [-1, 3, C2f, [512]]        # 15
+
+  - [-1, 1, nn.Upsample, [None, 2, 'nearest']]
+  - [[-1, 5], 1, Concat, [1]]  # 17 cat P3
+  - [-1, 3, C2f, [256]]        # 18
+
+  # 新增 P2 检测头路径 (Top-down)
+  - [-1, 1, nn.Upsample, [None, 2, 'nearest']]
+  - [[-1, 2], 1, Concat, [1]]  # 20 cat P2
+  - [-1, 3, C2f, [128]]        # 21 (P2层输出)
+
+  # 自底向上特征融合 (Bottom-up)
+  - [-1, 1, Conv, [128, 3, 2]]
+  - [[-1, 18], 1, Concat, [1]] # 23 cat P3
+  - [-1, 3, C2f, [256]]        # 24
+
+  - [-1, 1, Conv, [256, 3, 2]]
+  - [[-1, 15], 1, Concat, [1]] # 26 cat P4
+  - [-1, 3, C2f, [512]]        # 27
+
+  - [-1, 1, Conv, [512, 3, 2]]
+  - [[-1, 12], 1, Concat, [1]] # 29 cat P5 (SPPF输出)
+  - [-1, 3, C2f, [1024]]       # 30
+
+  # 四头检测：P2(21), P3(24), P4(27), P5(30)
+  - [[21, 24, 27, 30], 1, Detect, [nc]]
