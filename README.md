@@ -24,15 +24,23 @@
 ├── pt-onnx.py                # 将 .pt 权重导出为 ONNX
 ├── fuzhu.py / exp.py / GPU.py / runtime.py / count_*.py   # 辅助工具脚本
 ├── requirements.txt          # Python 依赖清单
-├── ultralytics/              # 修改版框架代码（基于 Ultralytics 8.0.29）
+├── ultralytics/              # 修改版框架代码（基于 Ultralytics 8.0.29，含 LSKA 注意力模块）
+│   └── models/v8/
+│       ├── YOLOv8_LSKA.yaml                  # 改进结构：LSKA
+│       ├── YOLOv8_LSKA_P2.yaml               # 改进结构：LSKA + P2小目标检测层
+│       └── YOLOv8_LSKA_P2_GhostConv.yaml     # 改进结构：LSKA + P2 + GhostConv
 ├── yolov8s.pt                # 预训练权重（用于训练）
 ├── data/
 │   └── aug_data/             # 数据集（YOLO格式，训练2000张/验证500张）
 │       ├── dataset.yaml      # 数据集配置 ★需要修改路径★
 │       ├── train/images + train/labels
 │       └── valid/images + valid/labels
-└── output/
-    └── exp9/weights/best.pt  # 已训练好的模型权重（测试用）
+└── output/                   # 已训练好的权重（可直接测试）
+    ├── exp9/weights/best.pt                        # 基线模型 YOLOv8s
+    ├── LSKA_P2_Scratch2/weights/best.pt            # 改进版（LSKA+P2）
+    ├── LSKA_P2_Scratch3/weights/best.pt            # 改进版（LSKA+P2）
+    ├── LSKA_P2_GhostConv_Scratch2/weights/best.pt  # 改进版（LSKA+P2+GhostConv）
+    └── LSKA_P2_GhostConv_Scratch3/weights/best.pt  # 改进版（LSKA+P2+GhostConv）
 ```
 
 ---
@@ -201,7 +209,17 @@ python pt-onnx.py
 
 ### 4.6 直接使用已训练好的权重测试
 
-仓库已附带训练好的权重 `output/exp9/weights/best.pt`，可以跳过训练，直接在 `pyqt.py` / `camera.py` / `predict.py` 中把模型路径指向它进行检测验证。
+仓库附带 5 组训练好的权重（在 `output/` 下），可以跳过训练，直接在 `pyqt.py` / `camera.py` / `predict.py` 中把模型路径指向对应 `best.pt` 进行检测验证：
+
+| 权重路径 | 对应模型 |
+|---------|---------|
+| `output/exp9/weights/best.pt` | 基线 YOLOv8s |
+| `output/LSKA_P2_Scratch2/weights/best.pt` | 改进版：LSKA + P2 |
+| `output/LSKA_P2_Scratch3/weights/best.pt` | 改进版：LSKA + P2 |
+| `output/LSKA_P2_GhostConv_Scratch2/weights/best.pt` | 改进版：LSKA + P2 + GhostConv |
+| `output/LSKA_P2_GhostConv_Scratch3/weights/best.pt` | 改进版：LSKA + P2 + GhostConv |
+
+> LSKA 注意力机制代码位于 `ultralytics/nn/modules.py`；如需从头训练改进模型，`train.py` 默认已配置为 `YOLOv8_LSKA_P2_GhostConv.yaml` 结构。
 
 ---
 
